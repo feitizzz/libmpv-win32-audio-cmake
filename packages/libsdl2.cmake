@@ -1,6 +1,8 @@
+# iMusic：音频构建不需要 SDL 的 Vulkan 视频面——砍掉 vulkan DEP。
+# vulkan.cmake 跟踪上游 main，其 2023 年的 git am 补丁已打不上
+# （sha1 information is lacking），整条 vulkan/shaderc 链唯一入口就是这里
 ExternalProject_Add(libsdl2
     DEPENDS
-        vulkan
         libiconv
     GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
     SOURCE_DIR ${SOURCE_LOCATION}
@@ -16,7 +18,7 @@ ExternalProject_Add(libsdl2
         -DCMAKE_INSTALL_PREFIX=${MINGW_INSTALL_PREFIX}
         -DCMAKE_FIND_ROOT_PATH=${MINGW_INSTALL_PREFIX}
         -DBUILD_SHARED_LIBS=OFF
-        -DSDL_VULKAN=ON
+        -DSDL_VULKAN=OFF
         -DSDL_TEST=OFF
         -DSDL_TEST_LIBRARY=OFF
     BUILD_COMMAND ${EXEC} ninja -C <BINARY_DIR>
