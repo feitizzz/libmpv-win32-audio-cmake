@@ -173,6 +173,8 @@ ExternalProject_Add(ffmpeg
 
         --enable-filter=overlay
         --enable-filter=equalizer
+        --enable-filter=aresample
+        --enable-filter=aformat
         # iMusic 音效第二档（均 LGPL，纯软件音频处理）：
         # bass=低频增强（tb303 风格）、extrastereo=3D 环绕、crossfeed=耳机串音、
         # aecho=回声/空间感、acompressor=动态压缩、alimiter=防爆音（配合 EQ 增益放开到 ±12dB）
