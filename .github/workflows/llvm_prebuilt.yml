@@ -1,0 +1,124 @@
+name: llvm prebuilt shortcut
+defaults:
+  run:
+    shell: bash
+
+# iMusic 加速通道：官方 llvm_clang.yml 是从源码 PGO 自举整条 LLVM（4-6 小时，
+# 逼近 GitHub 单 job 6h 上限）。本工作流用 mstorsjo/llvm-mingw 预编译包直接
+# 伪造出同构的 clang_root + 各架构 sysroot 缓存（仓库钉的是 llvm release/20.x，
+# 对应 llvm-mingw 20250709 = LLVM 20.1.8）。
+#
+# 布局对照（mpv_clang.yml 期望什么就造什么）：
+#   clang_root/bin/clang|clang++|ld.lld|llvm-*   ← 真编译器与工具（tarball 原样）
+#   clang_root/bin/<triple>-{gcc,g++,...}        ← mpv 运行时 cmake configure_file 自动重写
+#   clang_root/bin/<triple>-{ar,ranlib,windres…} ← llvm-wrapper.cmake 的软链清单，手动补
+#   build_$BIT/<triple>/{include,lib}            ← 每架构 sysroot（wrapper 的 --sysroot）
+#   clang_root/install_rustup                    ← 空目录占位（cargo-clean 的 du 不炸）
+on:
+  workflow_dispatch:
+
+env:
+  LLVM_MINGW_VER: "20250709"
+  LLVM_MINGW_FILE: "llvm-mingw-20250709-ucrt-ubuntu-20.04-x86_64.tar.xz"
+
+jobs:
+  fabricate:
+    name: Fabricate clang_root from prebuilt llvm-mingw
+    runs-on: ubuntu-latest
+    container:
+      image: docker://ghcr.io/shinchiro/archlinux:latest
+    steps:
+      - uses: actions/checkout@main
+        with:
+          ref: master
+
+      - name: Download prebuilt llvm-mingw (LLVM 20.1.8, ucrt, ubuntu-20.04 host)
+        run: |
+          curl -L --connect-timeout 60 --retry 5 --retry-delay 10 -o /tmp/llvm-mingw.tar.xz \
+            "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VER}/${LLVM_MINGW_FILE}"
+          ls -la /tmp/llvm-mingw.tar.xz
+
+      - name: Extract into clang_root (bin/ + include/ + lib/ + 各 triple sysroot 全量)
+        run: |
+          mkdir -p clang_root
+          tar -xJf /tmp/llvm-mingw.tar.xz -C clang_root --strip-components=1
+          test -x clang_root/bin/clang || { echo "FATAL: clang_root/bin/clang missing"; exit 1; }
+          clang_root/bin/clang --version | head -2
+
+      - name: Seed per-arch sysroots (build_$BIT/<triple> ← tarball 的 <triple>/)
+        run: |
+          for BIT in x86_64 x86_64_v3 i686 aarch64; do
+            case $BIT in
+              x86_64|x86_64_v3) SRC=x86_64 ;;
+              *) SRC=$BIT ;;
+            esac
+            mkdir -p "build_${BIT}/${BIT}-w64-mingw32"
+            cp -a "clang_root/${SRC}-w64-mingw32/." "build_${BIT}/${BIT}-w64-mingw32/"
+            test -f "build_${BIT}/${BIT}-w64-mingw32/lib/libmsvcrt.a" -o -f "build_${BIT}/${BIT}-w64-mingw32/lib/libucrt.a" \
+              || { echo "FATAL: sysroot $BIT incomplete"; ls "build_${BIT}/${BIT}-w64-mingw32"; exit 1; }
+          done
+
+      - name: Create tool symlinks (照抄 toolchain/llvm/llvm-wrapper.cmake 的软链清单)
+        run: |
+          cd clang_root/bin
+          # windres：优先 llvm-windres（独立工具），没有则用 llvm-rc（靠 argv[0] 后缀进 windres 模式）
+          WINDRES=llvm-rc; [ -e llvm-windres ] && WINDRES=llvm-windres
+          for T in x86_64-w64-mingw32 i686-w64-mingw32 aarch64-w64-mingw32; do
+            ln -sf llvm-ar        $T-ar
+            ln -sf llvm-ar        $T-llvm-ar
+            ln -sf llvm-ar        $T-ranlib
+            ln -sf llvm-ar        $T-llvm-ranlib
+            ln -sf llvm-ar        $T-dlltool
+            ln -sf llvm-objcopy   $T-objcopy
+            ln -sf llvm-objcopy   $T-strip
+            ln -sf llvm-size      $T-size
+            ln -sf llvm-strings   $T-strings
+            ln -sf llvm-nm        $T-nm
+            ln -sf llvm-readelf   $T-readelf
+            ln -sf $WINDRES       $T-windres
+            ln -sf llvm-addr2line $T-addr2line
+            ln -sf "$(command -v pkgconf)" $T-pkg-config
+            ln -sf "$(command -v pkgconf)" $T-pkgconf
+          done
+          # rustup 占位（音频包闭包无 cargo 包；mpv_clang.yml 的 cargo-clean 已加容错）
+          mkdir -p ../install_rustup
+          ls -la | grep -E "x86_64-w64-mingw32-(ar|windres|pkg-config)"
+
+      - name: Sanity compile test (x86_64 + aarch64 hello world via tarball 自带 wrapper)
+        run: |
+          cd /tmp && echo 'int main(){return 0;}' > t.c
+          $GITHUB_WORKSPACE/clang_root/bin/clang -target x86_64-pc-windows-gnu \
+            --sysroot $GITHUB_WORKSPACE/build_x86_64/x86_64-w64-mingw32 -fuse-ld=lld t.c -o t64.exe
+          $GITHUB_WORKSPACE/clang_root/bin/clang -target aarch64-pc-windows-gnu \
+            --sysroot $GITHUB_WORKSPACE/build_aarch64/aarch64-w64-mingw32 -fuse-ld=lld t.c -o tarm.exe
+          file t64.exe tarm.exe
+
+      - name: Saving clang root
+        uses: actions/cache/save@main
+        with:
+          path: clang_root
+          key: ${{ secrets.CACHE_VERSION }}-clang_root-${{ github.run_id }}
+
+      - name: Saving x86_64 toolchain
+        uses: actions/cache/save@main
+        with:
+          path: build_x86_64
+          key: ${{ secrets.CACHE_VERSION }}-clang-x86_64_toolchain-${{ github.run_id }}
+
+      - name: Saving x86_64_v3 toolchain
+        uses: actions/cache/save@main
+        with:
+          path: build_x86_64_v3
+          key: ${{ secrets.CACHE_VERSION }}-clang-x86_64_v3_toolchain-${{ github.run_id }}
+
+      - name: Saving i686 toolchain
+        uses: actions/cache/save@main
+        with:
+          path: build_i686
+          key: ${{ secrets.CACHE_VERSION }}-clang-i686_toolchain-${{ github.run_id }}
+
+      - name: Saving aarch64 toolchain
+        uses: actions/cache/save@main
+        with:
+          path: build_aarch64
+          key: ${{ secrets.CACHE_VERSION }}-clang-aarch64_toolchain-${{ github.run_id }}

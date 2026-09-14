@@ -150,6 +150,9 @@ jobs:
 
       - name: Cleaning rust toolchain directory
         if: always()
+        # iMusic：音频包闭包不含 rust 包，clang_root 由预编译 llvm-mingw 伪造时
+        # 没有 install_rustup，cargo-clean 必 127 —— 无 rust 可清，容忍失败
+        continue-on-error: true
         run: |
           ninja -C build_$BIT cargo-clean
 
@@ -191,12 +194,12 @@ jobs:
           PREFIX: ${{ secrets.CACHE_VERSION }}
         run: |
           cache_key=${CACHE_ID##*-}
-          curl -u shinchiro:$GH_TOKEN $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/actions/caches?key=$PREFIX-clang_root-$cache_key
-          curl -u shinchiro:$GH_TOKEN $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/actions/caches?key=$PREFIX-repository-$cache_key
-          curl -u shinchiro:$GH_TOKEN $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/actions/caches?key=$PREFIX-clang-i686_toolchain-$cache_key
-          curl -u shinchiro:$GH_TOKEN $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/actions/caches?key=$PREFIX-clang-x86_64_toolchain-$cache_key
-          curl -u shinchiro:$GH_TOKEN $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/actions/caches?key=$PREFIX-clang-x86_64_v3_toolchain-$cache_key
-          curl -u shinchiro:$GH_TOKEN $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/actions/caches?key=$PREFIX-clang-aarch64_toolchain-$cache_key
+          curl -u github-actions:$GH_TOKEN $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/${{ github.repository }}/actions/caches?key=$PREFIX-clang_root-$cache_key
+          curl -u github-actions:$GH_TOKEN $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/${{ github.repository }}/actions/caches?key=$PREFIX-repository-$cache_key
+          curl -u github-actions:$GH_TOKEN $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/${{ github.repository }}/actions/caches?key=$PREFIX-clang-i686_toolchain-$cache_key
+          curl -u github-actions:$GH_TOKEN $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/${{ github.repository }}/actions/caches?key=$PREFIX-clang-x86_64_toolchain-$cache_key
+          curl -u github-actions:$GH_TOKEN $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/${{ github.repository }}/actions/caches?key=$PREFIX-clang-x86_64_v3_toolchain-$cache_key
+          curl -u github-actions:$GH_TOKEN $CURL_RETRIES -s -o /dev/null -X DELETE -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/${{ github.repository }}/actions/caches?key=$PREFIX-clang-aarch64_toolchain-$cache_key
 
   release:
     name: Upload releases
@@ -265,7 +268,7 @@ jobs:
           **Workflow run**: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
           END
           )
-          id=$(curl -u media-kit:$GH_TOKEN $CURL_RETRIES -s -X POST -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/media-kit/libmpv-win32-audio-cmake/releases -d @- <<END | jq -r '.id'
+          id=$(curl -u github-actions:$GH_TOKEN $CURL_RETRIES -s -X POST -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/${{ github.repository }}/releases -d @- <<END | jq -r '.id'
           {
             "tag_name": "$short_date",
             "name": "$short_date",
@@ -273,4 +276,4 @@ jobs:
           }
           END
           )
-          for file in release/*.7z; do curl -u media-kit:$GH_TOKEN $CURL_RETRIES -X POST -H "Accept: application/vnd.github.v3+json" -H "Content-Type: $(file -b --mime-type $file)" https://uploads.github.com/repos/media-kit/libmpv-win32-audio-cmake/releases/$id/assets?name=$(basename $file) --data-binary @$file; done
+          for file in release/*.7z; do curl -u github-actions:$GH_TOKEN $CURL_RETRIES -X POST -H "Accept: application/vnd.github.v3+json" -H "Content-Type: $(file -b --mime-type $file)" https://uploads.github.com/repos/${{ github.repository }}/releases/$id/assets?name=$(basename $file) --data-binary @$file; done
