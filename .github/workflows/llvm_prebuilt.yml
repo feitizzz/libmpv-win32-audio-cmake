@@ -48,15 +48,20 @@ jobs:
 
       - name: Seed per-arch sysroots (build_$BIT/<triple> ← tarball 的 <triple>/)
         run: |
+          # 关键：cp -aL 解引用。tarball 里 <triple>/include 是指向
+          # ../generic-w64-mingw32/include 的软链，直接 cp -a 会把死链带进
+          # build_$BIT（generic 目录不在里面）→ 编译期 string.h 都找不到
           for BIT in x86_64 x86_64_v3 i686 aarch64; do
             case $BIT in
               x86_64|x86_64_v3) SRC=x86_64 ;;
               *) SRC=$BIT ;;
             esac
             mkdir -p "build_${BIT}/${BIT}-w64-mingw32"
-            cp -a "clang_root/${SRC}-w64-mingw32/." "build_${BIT}/${BIT}-w64-mingw32/"
-            test -f "build_${BIT}/${BIT}-w64-mingw32/lib/libmsvcrt.a" -o -f "build_${BIT}/${BIT}-w64-mingw32/lib/libucrt.a" \
-              || { echo "FATAL: sysroot $BIT incomplete"; ls "build_${BIT}/${BIT}-w64-mingw32"; exit 1; }
+            cp -aL "clang_root/${SRC}-w64-mingw32/." "build_${BIT}/${BIT}-w64-mingw32/"
+            test -f "build_${BIT}/${BIT}-w64-mingw32/include/string.h" \
+              || { echo "FATAL: sysroot $BIT headers missing"; ls "build_${BIT}/${BIT}-w64-mingw32"; exit 1; }
+            test -f "build_${BIT}/${BIT}-w64-mingw32/lib/libucrt.a" \
+              || { echo "FATAL: sysroot $BIT libs missing"; exit 1; }
           done
 
       - name: Create tool symlinks (照抄 toolchain/llvm/llvm-wrapper.cmake 的软链清单)
@@ -85,9 +90,9 @@ jobs:
           mkdir -p ../install_rustup
           ls -la | grep -E "x86_64-w64-mingw32-(ar|windres|pkg-config)"
 
-      - name: Sanity compile test (x86_64 + aarch64 hello world via tarball 自带 wrapper)
+      - name: Sanity compile test (x86_64 + aarch64 带头文件+链接全链路)
         run: |
-          cd /tmp && echo 'int main(){return 0;}' > t.c
+          cd /tmp && printf '#include <string.h>\n#include <stdio.h>\nint main(){return 0;}\n' > t.c
           $GITHUB_WORKSPACE/clang_root/bin/clang -target x86_64-pc-windows-gnu \
             --sysroot $GITHUB_WORKSPACE/build_x86_64/x86_64-w64-mingw32 -fuse-ld=lld -rtlib=compiler-rt -unwindlib=libunwind t.c -o t64.exe
           $GITHUB_WORKSPACE/clang_root/bin/clang -target aarch64-pc-windows-gnu \
