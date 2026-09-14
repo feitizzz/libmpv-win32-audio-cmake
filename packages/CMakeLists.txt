@@ -35,8 +35,6 @@ list(APPEND ep
     libudfread
     harfbuzz
     libsoxr
-    graphengine
-    libzimg
     fontconfig
     libunibreak
     libass
