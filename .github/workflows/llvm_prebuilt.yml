@@ -19,7 +19,7 @@ on:
 
 env:
   LLVM_MINGW_VER: "20250709"
-  LLVM_MINGW_FILE: "llvm-mingw-20250709-ucrt-ubuntu-20.04-x86_64.tar.xz"
+  LLVM_MINGW_FILE: "llvm-mingw-20250709-ucrt-ubuntu-22.04-x86_64.tar.xz"
 
 jobs:
   fabricate:
@@ -32,9 +32,10 @@ jobs:
         with:
           ref: master
 
-      - name: Download prebuilt llvm-mingw (LLVM 20.1.8, ucrt, ubuntu-20.04 host)
+      - name: Download prebuilt llvm-mingw (LLVM 20.1.8, ucrt, ubuntu-22.04 host)
         run: |
-          curl -L --connect-timeout 60 --retry 5 --retry-delay 10 -o /tmp/llvm-mingw.tar.xz \
+          # --fail：404 也返回 200 系以外的码，别让 "Not Found" 文本落盘当 tarball
+          curl -fL --connect-timeout 60 --retry 5 --retry-delay 10 -o /tmp/llvm-mingw.tar.xz \
             "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VER}/${LLVM_MINGW_FILE}"
           ls -la /tmp/llvm-mingw.tar.xz
 
