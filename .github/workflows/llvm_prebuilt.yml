@@ -97,7 +97,12 @@ jobs:
             --sysroot $GITHUB_WORKSPACE/build_x86_64/x86_64-w64-mingw32 -fuse-ld=lld -rtlib=compiler-rt -unwindlib=libunwind t.c -o t64.exe
           $GITHUB_WORKSPACE/clang_root/bin/clang -target aarch64-pc-windows-gnu \
             --sysroot $GITHUB_WORKSPACE/build_aarch64/aarch64-w64-mingw32 -fuse-ld=lld -rtlib=compiler-rt -unwindlib=libunwind t.c -o tarm.exe
-          file t64.exe tarm.exe
+          printf '#include <string>
+#include <vector>
+int main(){std::vector<std::string> v; return (int)v.size();}
+' > t.cpp
+          $GITHUB_WORKSPACE/clang_root/bin/clang++ -target x86_64-pc-windows-gnu             --sysroot $GITHUB_WORKSPACE/build_x86_64/x86_64-w64-mingw32 -fuse-ld=lld -rtlib=compiler-rt -unwindlib=libunwind -stdlib=libc++ t.cpp -o tpp.exe
+          file t64.exe tarm.exe tpp.exe
 
       - name: Saving clang root
         uses: actions/cache/save@main
