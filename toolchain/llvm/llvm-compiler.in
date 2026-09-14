@@ -1,6 +1,9 @@
 #!/bin/bash
 PROG=@CMAKE_INSTALL_PREFIX@/bin/@clang_compiler@
 FLAGS="$FLAGS -target @TARGET_CPU@-pc-windows-gnu"
+# iMusic：预编译 llvm-mingw 未内置 compiler-rt 默认值（其上游 clang 烧死了
+# CLANG_DEFAULT_RTLIB=compiler-rt），显式声明避免链接找 -lgcc/-lgcc_eh
+FLAGS="$FLAGS -rtlib=compiler-rt -unwindlib=libunwind"
 FLAGS="$FLAGS @driver_mode@ --sysroot @MINGW_INSTALL_PREFIX@"
 FLAGS="$FLAGS -fuse-ld=lld --ld-path=@TARGET_ARCH@-ld"
 FLAGS="$FLAGS -Wno-unused-command-line-argument"

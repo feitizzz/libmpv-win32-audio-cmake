@@ -89,9 +89,9 @@ jobs:
         run: |
           cd /tmp && echo 'int main(){return 0;}' > t.c
           $GITHUB_WORKSPACE/clang_root/bin/clang -target x86_64-pc-windows-gnu \
-            --sysroot $GITHUB_WORKSPACE/build_x86_64/x86_64-w64-mingw32 -fuse-ld=lld t.c -o t64.exe
+            --sysroot $GITHUB_WORKSPACE/build_x86_64/x86_64-w64-mingw32 -fuse-ld=lld -rtlib=compiler-rt -unwindlib=libunwind t.c -o t64.exe
           $GITHUB_WORKSPACE/clang_root/bin/clang -target aarch64-pc-windows-gnu \
-            --sysroot $GITHUB_WORKSPACE/build_aarch64/aarch64-w64-mingw32 -fuse-ld=lld t.c -o tarm.exe
+            --sysroot $GITHUB_WORKSPACE/build_aarch64/aarch64-w64-mingw32 -fuse-ld=lld -rtlib=compiler-rt -unwindlib=libunwind t.c -o tarm.exe
           file t64.exe tarm.exe
 
       - name: Saving clang root
